@@ -1,7 +1,7 @@
 # ============================================================================
 # Feed-forward neural network (pytorch)
-# Recall fire: 
-# False Alarm: 
+# Recall fire: 0.968
+# False Alarm: 0.161
 # ============================================================================
 # ----------------------------------------------------------------------------
 # fire_filenames
@@ -21,9 +21,9 @@ fire_filenames = [
 'af9_400m_heptane.csv',
 'af9_500m_heptane.csv',
 'Fd5Min_1670324284_500m_nheptane_fire.csv',
-'Fd5Min_1670325931_800m_nheptane_fire.csv',
-'Fd5Min_1670334951_800m_nheptane_fire.csv',
-'Fd5Min_1670336466_1000m_nheptane_fire.csv',
+# 'Fd5Min_1670325931_800m_nheptane_fire.csv',
+# 'Fd5Min_1670334951_800m_nheptane_fire.csv',
+# 'Fd5Min_1670336466_1000m_nheptane_fire.csv',
 'oil_rag_fire_50m.csv',
 'oilrag9_50m_dying_fire.csv',
 'oilrag8_60m_dying_fire.csv',
@@ -34,7 +34,7 @@ fire_filenames = [
 'oilrag3_7m.csv',
 'oilrag2_4m.csv',
 'oilrag1_2m.csv',
-'small_gas_flame_250m.csv',
+# 'small_gas_flame_250m.csv',
 'small_gas_flame_70m.csv',
 'small_gas_flame_50m.csv',
 'oil_rag_fire_100m_1.csv',
@@ -44,9 +44,9 @@ fire_filenames = [
                   ]
 pulse_filenames = [
 'filament_bulb_recording_ref.csv',
-'halogen_on_off_30s_close.csv',
-'halogen_on_off_30s_further.csv',
-'halogen_on_off_30s_farthest.csv',
+# 'halogen_on_off_30s_close.csv',
+# 'halogen_on_off_30s_further.csv',
+# 'halogen_on_off_30s_farthest.csv',
 'bulb_2m.csv',
 'jw_finger_lr_23_12_06.csv',
 'jw_finger_lr_23_12_06_v2.csv',
@@ -108,6 +108,7 @@ class FFNN(nn.Module):
     def forward(self, x):
         x = F.relu(self.fc1(x))
         x = self.fc2(x)
+        x = F.softmax(x)
         return x
 
 # Training Function
@@ -145,9 +146,9 @@ if __name__ == "__main__":
     preprocessed_data = {k: v['LR'] for k, v in preprocessed_data.items()}
     preprocessed_data = {k: [obs_list.reshape(-1) for obs_list in v] for k, v in preprocessed_data.items()}
 
-    # Evaluate classifier using Leave-One-Out (LOO)
-    outdir = '/Users/liobaberndt/Desktop/Github/wildfire/classifier_results'
-    os.makedirs(outdir, exist_ok=True)
+    fire_alarm_rates = []
+    false_alarm_rates = []
+
     all_filenames = fire_filenames + pulse_filenames + welding + modulated
 
     for test_file in all_filenames:
@@ -156,27 +157,50 @@ if __name__ == "__main__":
         fire_spectra_train = []
         ref_spectra_train = []
         for fname in train_files:
-            normed_spectra = preprocessed_data.get(fname, [])
+            normed_spectra = preprocessed_data[fname]
             if fname in fire_filenames:
                 fire_spectra_train.extend(normed_spectra)
             else:
                 ref_spectra_train.extend(normed_spectra)
 
-        test_normed_spectra = preprocessed_data.get(test_file, [])
+        test_normed_spectra = preprocessed_data[test_file]
         fire_spectra_labels = [1] * len(fire_spectra_train)
         ref_spectra_labels = [0] * len(ref_spectra_train)
         train_x = np.vstack([fire_spectra_train, ref_spectra_train])
         train_y = np.array(fire_spectra_labels + ref_spectra_labels)
-
+        print("fire_spectra_train shape:", np.array(fire_spectra_train).shape)
+        print("ref_spectra_train shape:", np.array(ref_spectra_train).shape)
         # Prepare data loaders
         train_loader, val_loader = prepare_data(train_x, train_y)
 
         # Initialize and train the model
-        input_dim = train_x.shape[1]
+        input_dim = 102
         hidden_dim = 64
         output_dim = 2
         model = FFNN(input_dim, hidden_dim, output_dim)
         train_model(model, train_loader, val_loader)
 
-        # Save or evaluate results as needed
-        # ...
+        # Testing the classifier
+        model.eval()
+        with torch.no_grad():
+            test_x_tensor = torch.FloatTensor(test_normed_spectra)
+            test_preds = model(test_x_tensor)
+            binary_preds = test_preds[:, 1].numpy() > 0.5  # Probabilities of class 1 (fire)
+            
+            predicted_alarm_rate = binary_preds.mean()
+
+            if test_file in fire_filenames:
+                fire_alarm_rates.append(predicted_alarm_rate)
+                print(f'Fire recall {test_file}: {predicted_alarm_rate:.3f}')
+            else:
+                false_alarm_rates.append(predicted_alarm_rate)
+                print(f'False alarm on reference data {test_file}: {predicted_alarm_rate:.3f}')
+            
+
+    # Calculate average rates
+    avg_fire_alarm_rate = np.mean(fire_alarm_rates)
+    avg_false_alarm_rate = np.mean(false_alarm_rates)
+
+    print(f'Average fire alarm rate: {avg_fire_alarm_rate:.3f}')
+    print(f'Average false alarm rate: {avg_false_alarm_rate:.3f}')
+
