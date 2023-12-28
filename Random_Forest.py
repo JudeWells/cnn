@@ -1,7 +1,7 @@
 # ============================================================================
-# XGBoost classifier
-# Recall fire: 0.971
-# False Alarm: 0.086
+# Random Forest
+# Recall fire: 0.969
+# False Alarm: 0.103
 # ============================================================================
 # ----------------------------------------------------------------------------
 # fire_filenames
@@ -56,7 +56,6 @@ welding = [
     'stick_welding_1.csv',
     'stick_welding_2.csv',
 ]
-
 modulated = [
 '26 Sept 2023 - Iron 50cm no steam.csv',
 '29 Sept 2023 - iron 2m no steam (no flame detected).csv',
@@ -80,9 +79,9 @@ import datetime
 import os
 import numpy as np
 import pandas as pd
-import xgboost as xgb  
+from sklearn.ensemble import RandomForestClassifier 
 # ----------------------------------------------------------------------------
-# Evaluate the classifier
+# Evaluate classifier 
 # ----------------------------------------------------------------------------
 def evaluate_classifier_loo(preprocessed_data):
     outdir = '/Users/liobaberndt/Desktop/Github/wildfire/classifier_results'
@@ -91,9 +90,8 @@ def evaluate_classifier_loo(preprocessed_data):
     all_filenames = fire_filenames + pulse_filenames + welding + modulated
     for test_file in all_filenames:
         train_files = [f for f in all_filenames if f != test_file]
-# ----------------------------------------------------------------------------
-# Train data preparation
-# ----------------------------------------------------------------------------
+
+        # Train data preparation
         fire_spectra_train = []
         ref_spectra_train = []
         for fname in train_files:
@@ -103,26 +101,21 @@ def evaluate_classifier_loo(preprocessed_data):
             else:
                 ref_spectra_train.extend(normed_spectra)
 
+        # Test data preparation
         test_normed_spectra = preprocessed_data.get(test_file, [])
-# ----------------------------------------------------------------------------
-# Training the classifier 
-# ----------------------------------------------------------------------------
+
+        # Training the classifier
         fire_spectra_labels = [1] * len(fire_spectra_train)
         ref_spectra_labels = [0] * len(ref_spectra_train)
         train_x = np.vstack([fire_spectra_train, ref_spectra_train])
         train_y = np.array(fire_spectra_labels + ref_spectra_labels)
 # ----------------------------------------------------------------------------
-# XGBoost Classifier Initialization
-# ----------------------------------------------------------------------------       
-        clf = xgb.XGBClassifier(
-            objective='binary:logistic',
-            eval_metric='logloss',
-            use_label_encoder=False
-        )
+# Random Forest Classifier Initialization
+# ----------------------------------------------------------------------------    
+        clf = RandomForestClassifier()
         clf.fit(train_x, train_y)
-# ----------------------------------------------------------------------------
-# Testing the classifier
-# ---------------------------------------------------------------------------- 
+
+        # Testing the classifier
         if len(test_normed_spectra):
             preds = clf.predict(test_normed_spectra)
             if test_file in fire_filenames:
@@ -145,13 +138,12 @@ if __name__=="__main__":
     data_pickle_path = '/Users/liobaberndt/Desktop/Github/wildfire/preprocessed_data.pkl'
     with open(data_pickle_path, 'rb') as file:
         preprocessed_data = pickle.load(file)
-# ----------------------------------------------------------------------------
-# Restructure the data so that it only contains the LR data
-# ---------------------------------------------------------------------------- 
+
+    # Restructure the data so that it only contains the LR data
     preprocessed_data = {k: v['LR'] for k, v in preprocessed_data.items()}
-# ----------------------------------------------------------------------------
-# Restructure the data so that it only contains the all sensors:
-# ---------------------------------------------------------------------------- 
+
+    # Restructure the data so that it only contains all sensors:
     preprocessed_data = {k: [obs_list.reshape(-1) for obs_list in v] for k, v in preprocessed_data.items()}
     
     evaluate_classifier_loo(preprocessed_data)
+    bp = 1
