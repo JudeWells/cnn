@@ -150,8 +150,8 @@ if __name__=="__main__":
     # Restructure the data so that it only contains the LR data
     preprocessed_data = {k: v['LR'] for k, v in preprocessed_data.items()}
 
-    # Restructure the data so that it only contains the fire sensor (instead of statistics for all 3):
-    preprocessed_data = {k: [obs_list[:, 1] for obs_list in v] for k, v in preprocessed_data.items()}
+    # Restructure the data so that it only contains all sensors:
+    preprocessed_data = {k: [obs_list.reshape(-1) for obs_list in v] for k, v in preprocessed_data.items()}
 
     evaluate_classifier_loo(preprocessed_data)
 
